@@ -102,11 +102,12 @@
       flex-shrink: 0;
       border-right: 1px solid var(--border);
       background: var(--surface);
-      min-height: calc(100vh - 57px);
+      max-height: calc(100vh - 57px);
       padding: 16px 12px;
       display: flex;
       flex-direction: column;
       gap: 10px;
+      overflow-y: auto;
       transition: background 0.2s, border-color 0.2s;
     }
 
@@ -119,7 +120,12 @@
       padding: 0 4px;
     }
 
-    .player-list { display: flex; flex-direction: column; gap: 3px; }
+    .player-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-height: 0;
+    }
 
     .player-item {
       display: flex;
@@ -239,7 +245,6 @@
 
     td.rank   { color: var(--text-dim); font-size: 0.75rem; width: 30px; }
     td.pname  { font-weight: 500; }
-    td.rig    { color: var(--text-muted); font-size: 0.78rem; width: 46px; }
     td.tog    { color: var(--text-muted); font-size: 0.75rem; width: 54px; white-space: nowrap; }
 
     .bar-wrap { display: flex; align-items: center; gap: 8px; }
@@ -256,11 +261,41 @@
     .empty-row { text-align: center; color: var(--text-muted); padding: 24px; font-size: 0.85rem; }
 
     /* ── MATRIX ── */
+    .matrix-tools {
+      display: flex;
+      justify-content: flex-start;
+      padding-bottom: 10px;
+    }
+    .matrix-search {
+      width: 100%;
+      max-width: 320px;
+      border: 1px solid var(--input-border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.85rem;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--input-bg);
+      outline: none;
+      transition: border-color 0.15s, background 0.2s;
+    }
+    .matrix-search:focus { border-color: var(--text-sub); background: var(--input-focus); }
+
     .matrix-scroll { overflow-x: auto; padding: 16px; }
-    .matrix-tbl { border-collapse: separate; border-spacing: 3px; }
+    .matrix-tbl { border-collapse: separate; border-spacing: 3px; min-width: max-content; }
     .matrix-tbl th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
       font-size: 0.7rem; font-weight: 600; color: var(--text-muted);
       padding: 4px 6px; white-space: nowrap; text-align: center;
+      z-index: 2;
+    }
+    .matrix-tbl th:first-child {
+      left: 0;
+      z-index: 3;
+      text-align: left;
+      background: var(--surface);
     }
     .matrix-tbl th.rh { text-align: right; padding-right: 10px; color: var(--text-sub); }
     .mcell {
@@ -273,19 +308,40 @@
 
     /* ── SIDEBAR SEARCH ── */
     .sidebar-search {
+      position: sticky;
+      top: 0;
+      z-index: 2;
       border: 1px solid var(--input-border);
       border-radius: 5px;
       padding: 6px 8px;
       font-size: 0.8rem;
       font-family: inherit;
       color: var(--text);
-      background: var(--input-bg);
+      background: var(--surface);
       outline: none;
       width: 100%;
       transition: border-color 0.15s, background 0.2s;
     }
     .sidebar-search:focus { border-color: var(--text-sub); background: var(--input-focus); }
     .sidebar-search::placeholder { color: var(--text-dim); }
+
+    .sidebar::-webkit-scrollbar {
+      width: 10px;
+    }
+    .sidebar::-webkit-scrollbar-track {
+      background: var(--surface);
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 999px;
+    }
+    .sidebar::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+    .sidebar {
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) var(--surface);
+    }
 
     /* ── LOADING ── */
     #loadState { text-align: center; padding: 60px 20px; color: var(--text-muted); font-size: 0.85rem; }
@@ -344,14 +400,14 @@
           <div class="card">
             <div class="card-header">You Synergize with Them <span>you guess songs on their list</span></div>
             <table>
-              <thead><tr><th>#</th><th>Player</th><th>Rig</th><th>Guess Rate</th><th>Songs</th></tr></thead>
+              <thead><tr><th>#</th><th>Player</th><th>Guess Rate</th><th>Songs</th></tr></thead>
               <tbody id="tbYWT"></tbody>
             </table>
           </div>
           <div class="card">
             <div class="card-header">They Synergize with You <span>they guess songs on your list</span></div>
             <table>
-              <thead><tr><th>#</th><th>Player</th><th>Rig</th><th>Guess Rate</th><th>Songs</th></tr></thead>
+              <thead><tr><th>#</th><th>Player</th><th>Guess Rate</th><th>Songs</th></tr></thead>
               <tbody id="tbTWY"></tbody>
             </table>
           </div>
@@ -360,8 +416,11 @@
 
       <!-- MATRIX VIEW -->
       <div id="panelMatrix" style="display:none">
+        <div class="matrix-tools">
+          <input class="matrix-search" id="matrixSearch" type="text" placeholder="Search row…" oninput="filterMatrix()" />
+        </div>
         <div class="card">
-          <div class="card-header">Synergy Matrix <span>row = guesser → column = list owner · cell = guess rate % (events / songs together)</span></div>
+          <div class="card-header">Synergy Matrix <span>row = guesser → column = list owner · cell = guess rate % (correct / songs together)</span></div>
           <div class="matrix-scroll"><table class="matrix-tbl" id="matTbl"></table></div>
         </div>
       </div>
@@ -505,13 +564,12 @@
   }
 
   function rows(entries) {
-    if (!entries.length) return `<tr><td colspan="5" class="empty-row">No data</td></tr>`;
+    if (!entries.length) return `<tr><td colspan="4" class="empty-row">No data</td></tr>`;
     return entries.map((e, i) => {
       const barW = Math.round(e.guess_rate_pct);
       return `<tr>
         <td class="rank">${i+1}</td>
         <td class="pname">${esc(e.name)}</td>
-        <td class="rig">${rigs[e.uid] ?? '—'}</td>
         <td><div class="bar-wrap">
           <div class="bar-track"><div class="bar-fill" style="width:${barW}%"></div></div>
           <span class="rate-pct">${e.guess_rate_pct.toFixed(1)}%</span>
@@ -528,6 +586,7 @@
 
     const hdr = ps.map(([,n]) => `<th>${esc(n)}</th>`).join('');
     const body = ps.map(([gid, gn]) => {
+      const rowName = esc(gn.toLowerCase());
       const cells = ps.map(([oid]) => {
         const s = (m[gid] || {})[oid];
         if (!s || s.songs_together === 0)
@@ -555,10 +614,19 @@
           ${s.guess_rate_pct.toFixed(0)}%<small>${s.synergy_events}/${s.songs_together}</small>
         </div></td>`;
       }).join('');
-      return `<tr><th class="rh">${esc(gn)}</th>${cells}</tr>`;
+      return `<tr data-name="${rowName}"><th class="rh">${esc(gn)}</th>${cells}</tr>`;
     }).join('');
 
     $('matTbl').innerHTML = `<thead><tr><th></th>${hdr}</tr></thead><tbody>${body}</tbody>`;
+    filterMatrix();
+  }
+
+  function filterMatrix() {
+    const q = $('matrixSearch').value.toLowerCase().trim();
+    document.querySelectorAll('#matTbl tbody tr').forEach(row => {
+      const name = row.dataset.name || '';
+      row.style.display = (!q || name.includes(q)) ? '' : 'none';
+    });
   }
 
   // ── Helpers ────────────────────────────────────────────────────────────────
