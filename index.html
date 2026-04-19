@@ -391,7 +391,7 @@
       <div class="tabs">
         <button class="tab-btn active" id="tabPlayer" onclick="switchTab('player')">👤 Player View</button>
         <button class="tab-btn"        id="tabMatrix" onclick="switchTab('matrix')">🗂 Full Matrix</button>
-        <button class="tab-btn"        id="btnFilterResults" onclick="toggleFilterResults()">Filter <50 Songs</button>
+        <button class="tab-btn"        id="btnFilterResults" onclick="toggleFilterResults()">Show All Results</button>
       </div>
 
       <!-- PLAYER VIEW -->
@@ -447,7 +447,7 @@
   let G         = null;
   let activeUid = null;
   let rigs      = {};   // uid → songs_on_list
-  let ignoreLowRigResults = false;
+  let ignoreLowRigResults = true;
 
   const esc = s => String(s ?? '')
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
